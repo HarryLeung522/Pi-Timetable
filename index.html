@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>派克教班日期</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; background-color: #f8f9fa; }
+        .container { max-width: 1200px; margin-top: 30px; }
+        .header-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        #calendar { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); min-height: 800px; }
+        
+        /* 針對行事曆事件的樣式 */
+        .fc-event { cursor: pointer; border: none; }
+        .fc-event-title { font-weight: bold; }
+        .tag-tutor { background-color: #e3f2fd; color: #0d47a1; border-radius: 4px; padding: 2px 4px; font-size: 0.85em; margin-right: 5px; }
+        
+        /* Loading 遮罩 */
+        #loading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+    </style>
+</head>
+<body>
+
+    <div id="loading">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2">正在讀取派克導師資料...</p>
+    </div>
+
+    <div class="container">
+        <div class="header-box">
+            <h2 class="mb-4 text-center fw-bold text-primary"><i class="bi bi-calendar-check"></i> 派克導師提示器</h2>
+            
+            <div class="row g-3 align-items-end mb-4 border-bottom pb-4">
+                <div class="col-md-4">
+                    <label for="promptDate" class="form-label fw-bold">選擇提示日期</label>
+                    <input type="date" id="promptDate" class="form-control">
+                </div>
+                <div class="col-md-8">
+                    <button class="btn btn-success w-100" onclick="generatePrompt()">
+                        <i class="bi bi-chat-text"></i> 生成提示字句的
+                    </button>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">選取導師</label>
+                    <select id="filterTutor" class="form-select">
+                        <option value="all">顯示所有導師</option>
+                        </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">選取課程</label>
+                    <select id="filterCourse" class="form-select">
+                        <option value="all">顯示所有課程</option>
+                        </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">顯示週/月</label>
+                    <select id="viewSelect" class="form-select">
+                        <option value="dayGridMonth">月曆視圖 (Month)</option>
+                        <option value="listWeek">週列表 (Week List)</option>
+                        <option value="timeGridWeek">週時間表 (Week Grid)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="calendar"></div>
+    </div>
+
+    <div class="modal fade" id="promptModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">提示字句生成結果</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <textarea id="promptResult" class="form-control" rows="8"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                    <button type="button" class="btn btn-primary" onclick="copyToClipboard()">複製文字</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 設定
+        const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQFFF43IJhu4qgR8KiR_Oo9lwv7LkuTcjHzebpTvUd-SnnivG_5GwDT3-JzEncLTxKXbZuQ8LnU90n3/pub?output=csv';
+        
+        let allEvents = []; // 儲存所有處理過的課程資料
+        let calendar; // FullCalendar 實例
+
+        // 當頁面載入完成
+        document.addEventListener('DOMContentLoaded', function() {
+            // 設定日期選擇器預設為今天
+            document.getElementById('promptDate').valueAsDate = new Date();
+
+            // 初始化行事曆
+            initCalendar();
+            
+            // 讀取資料
+            fetchData();
+
+            // 監聽篩選器變更
+            document.getElementById('filterTutor').addEventListener('change', refreshCalendar);
+            document.getElementById('filterCourse').addEventListener('change', refreshCalendar);
+            document.getElementById('viewSelect').addEventListener('change', function() {
+                calendar.changeView(this.value);
+            });
+        });
+
+        // 1. 初始化 FullCalendar
+        function initCalendar() {
+            var calendarEl = document.getElementById('calendar');
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                locale: 'zh-tw',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: '' // 隱藏原本的切換按鈕，改用下拉選單控制
+                },
+                eventClick: function(info) {
+                    alert(`詳細資訊：\n\n學校：${info.event.extendedProps.school}\n課程：${info.event.extendedProps.course}\n時間：${info.event.extendedProps.timeStr}\n導師：${info.event.extendedProps.tutor}`);
+                },
+                eventContent: function(arg) {
+                    // 自定義顯示內容
+                    let timeText = arg.event.extendedProps.timeStr || '';
+                    let tutorName = arg.event.extendedProps.tutor;
+                    let schoolName = arg.event.extendedProps.school;
+                    
+                    return {
+                        html: `<div style="font-size:0.85rem;">
+                                <span class="tag-tutor">${tutorName}</span><br>
+                                <b>${timeText}</b> ${schoolName}
+                               </div>`
+                    };
+                }
+            });
+            calendar.render();
+        }
+
+        // 2. 讀取與解析資料
+        function fetchData() {
+            Papa.parse(GOOGLE_SHEET_CSV_URL, {
+                download: true,
+                header: false, // 假設第一行是標題，但我們用索引讀取比較安全
+                complete: function(results) {
+                    processData(results.data);
+                    document.getElementById('loading').style.display = 'none';
+                },
+                error: function(err) {
+                    alert("讀取 Google Sheet 失敗，請檢查網路或連結。");
+                    document.getElementById('loading').style.display = 'none';
+                }
+            });
+        }
+
+        // 3. 資料處理邏輯
+        function processData(rows) {
+            // 欄位對應: A=0(學校), B=1(課程), C=2(堂數), D=3(日期), E=4(星期), F=5(時間), G=6(導師)
+            
+            let tutors = new Set();
+            let courses = new Set();
+
+            // 從第 1 行開始 (跳過標題行 Index 0)
+            for (let i = 1; i < rows.length; i++) {
+                let col = rows[i];
+                if (!col[0] || !col[3]) continue; // 略過空行
+
+                let rawDate = col[3]; // 2026年2月6日
+                let parsedDate = parseChineseDate(rawDate);
+                
+                if (parsedDate) {
+                    let eventObj = {
+                        id: i,
+                        title: `${col[0]} - ${col[1]}`, // 學校 - 課程
+                        start: parsedDate, // 用於行事曆定位
+                        allDay: true, // 因為時間格式可能不標準，我們先設為全天，時間顯示在文字中
+                        // 自定義屬性
+                        school: col[0],
+                        course: col[1],
+                        session: col[2],
+                        dateRaw: rawDate,
+                        timeStr: col[5],
+                        tutor: col[6],
+                        // 顏色區分
+                        backgroundColor: getColorByCourse(col[1]) 
+                    };
+
+                    allEvents.push(eventObj);
+                    
+                    // 收集清單用於下拉選單
+                    if(col[6]) tutors.add(col[6]);
+                    if(col[1]) courses.add(col[1]);
+                }
+            }
+
+            populateSelect('filterTutor', tutors);
+            populateSelect('filterCourse', courses);
+            
+            // 初始渲染
+            refreshCalendar();
+        }
+
+        // 輔助：解析中文日期 (YYYY年M月D日 -> YYYY-MM-DD)
+        function parseChineseDate(dateStr) {
+            // 使用正則表達式提取數字
+            let match = dateStr.match(/(\d+)年(\d+)月(\d+)日/);
+            if (match) {
+                let year = match[1];
+                let month = match[2].padStart(2, '0');
+                let day = match[3].padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+            return null;
+        }
+
+        // 輔助：填充下拉選單
+        function populateSelect(elementId, dataset) {
+            let select = document.getElementById(elementId);
+            let sortedData = Array.from(dataset).sort();
+            sortedData.forEach(item => {
+                let option = document.createElement('option');
+                option.value = item;
+                option.text = item;
+                select.appendChild(option);
+            });
+        }
+
+        // 輔助：根據課程名稱給顏色 (隨機簡單雜湊)
+        function getColorByCourse(courseName) {
+            let hash = 0;
+            for (let i = 0; i < courseName.length; i++) {
+                hash = courseName.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            let c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+            return '#' + "00000".substring(0, 6 - c.length) + c;
+        }
+
+        // 4. 更新行事曆 (根據篩選)
+        function refreshCalendar() {
+            let selectedTutor = document.getElementById('filterTutor').value;
+            let selectedCourse = document.getElementById('filterCourse').value;
+
+            let filteredEvents = allEvents.filter(event => {
+                let matchTutor = (selectedTutor === 'all' || event.tutor === selectedTutor);
+                let matchCourse = (selectedCourse === 'all' || event.course === selectedCourse);
+                return matchTutor && matchCourse;
+            });
+
+            calendar.removeAllEvents();
+            calendar.addEventSource(filteredEvents);
+        }
+
+        // 5. 生成提示字句功能
+        function generatePrompt() {
+            let dateInput = document.getElementById('promptDate').value; // YYYY-MM-DD
+            let selectedTutor = document.getElementById('filterTutor').value;
+
+            if (!dateInput) {
+                alert("請選擇日期！");
+                return;
+            }
+
+            // 篩選當日且符合選定導師的課程
+            let targets = allEvents.filter(e => {
+                let isDateMatch = e.start === dateInput;
+                let isTutorMatch = (selectedTutor === 'all' || e.tutor === selectedTutor);
+                return isDateMatch && isTutorMatch;
+            });
+
+            if (targets.length === 0) {
+                alert("該日期沒有找到符合條件的課程資料。");
+                return;
+            }
+
+            // 構建文字
+            let text = `【派克導師上課提醒】\n日期：${dateInput}\n`;
+            if (selectedTutor !== 'all') {
+                text += `致導師：${selectedTutor}\n`;
+            }
+            text += `------------------------\n`;
+
+            targets.forEach(item => {
+                text += `⏰ 時間：${item.timeStr}\n`;
+                text += `🏫 學校：${item.school}\n`;
+                text += `📚 課程：${item.course} (第${item.session}堂)\n`;
+                text += `👨‍🏫 導師：${item.tutor}\n`;
+                text += `\n`;
+            });
+            text += `請準時出席，謝謝！`;
+
+            // 顯示 Modal
+            document.getElementById('promptResult').value = text;
+            new bootstrap.Modal(document.getElementById('promptModal')).show();
+        }
+
+        // 複製到剪貼簿
+        function copyToClipboard() {
+            let copyText = document.getElementById("promptResult");
+            copyText.select();
+            document.execCommand("copy"); // 兼容舊版
+            
+            // 現代瀏覽器寫法
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(copyText.value);
+            }
+            alert("已複製到剪貼簿！");
+        }
+
+    </script>
+</body>
+</html>
