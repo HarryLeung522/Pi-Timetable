@@ -54,9 +54,9 @@
         }
         .btn-accent:hover { opacity: 0.8; color: white; }
 
-        /* 移除所有連結底線 (包括日期、星期標題) */
+        /* 移除所有連結底線 */
         a { text-decoration: none !important; }
-        .fc-col-header-cell-cushion, .fc-daygrid-day-number {
+        .fc-col-header-cell-cushion, .fc-daygrid-day-number, .fc-list-day-text, .fc-list-day-side-text {
             text-decoration: none !important;
             color: var(--primary-color) !important;
         }
@@ -86,6 +86,11 @@
 
         .event-time { font-weight: 700; color: #444; }
         .event-tutor { font-size: 0.85em; color: #666; font-style: italic; }
+
+        /* 讓月曆格子高度隨內容自動撐開，不顯示 +more */
+        .fc-daygrid-day-events {
+            padding-bottom: 10px !important;
+        }
 
         #loading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
     </style>
@@ -123,8 +128,9 @@
                 <div class="col-md-4">
                     <label class="form-label fw-bold">顯示模式</label>
                     <select id="viewSelect" class="form-select">
-                        <option value="dayGridMonth">月曆視圖 (Month)</option>
-                        <option value="dayGridWeek">一週日曆 (Week)</option>
+                        <option value="dayGridMonth">月曆視圖 (顯示所有)</option>
+                        <option value="dayGridWeek">一週日曆 (格子)</option>
+                        <option value="listWeek">週列表 (清單)</option>
                     </select>
                 </div>
             </div>
@@ -162,10 +168,14 @@
                 locale: 'zh-tw',
                 headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
                 eventOrder: "sortOrder,start",
-                dayMaxEvents: true, // 當事件過多時顯示 "more"
+                // 關鍵設定：強制顯示所有事件，不收縮成 +more
+                dayMaxEvents: false,
+                dayMaxEventRows: false,
                 eventContent: function(arg) {
                     let p = arg.event.extendedProps;
                     let colorClass = TUTOR_COLORS[p.tutor] || 'tutor-border-default';
+                    
+                    // 列表模式下的顯示略有不同，但這裡統一使用 HTML 結構
                     return {
                         html: `<div class="${colorClass}" style="padding-left: 5px;">
                                 <div class="event-time">${p.timeStr} <span class="event-tutor">| ${p.tutor}</span></div>
@@ -199,6 +209,7 @@
                                 if(sOrder === -1) sOrder = 99;
 
                                 allEvents.push({
+                                    title: cleanName + " | " + col[0], // 列表視圖會用到 title
                                     start: date,
                                     school: col[0],
                                     course: col[1],
