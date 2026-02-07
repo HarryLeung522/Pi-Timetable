@@ -59,7 +59,6 @@
             border-color: var(--primary-color);
         }
         
-        /* 基礎事件樣式 */
         .fc-event {
             cursor: pointer;
             border: none;
@@ -71,11 +70,11 @@
             border-radius: 4px;
         }
 
-        /* 根據導師動態指定的邊框顏色 */
+        /* 導師顏色邊框定義 */
         .tutor-border-default { border-left: 5px solid #3498db !important; } /* 天藍 */
         .tutor-border-harry { border-left: 5px solid #f39c12 !important; }   /* 橙 */
         .tutor-border-zoe { border-left: 5px solid #27ae60 !important; }     /* 綠 */
-        .tutor-border-ian { border-left: 5px solid #2980b9 !important; }     /* 藍 */
+        .tutor-border-ian { border-left: 5px solid #e74c3c !important; }     /* 紅 (已改為紅色) */
         .tutor-border-chris { border-left: 5px solid #8e44ad !important; }   /* 紫 */
 
         .event-time { font-weight: 700; color: #444; }
@@ -96,7 +95,7 @@
         
         <div class="controls-box text-center">
             <div class="mb-4 border-bottom pb-4">
-                <a href="https://github.com/HarryLeung522/pi-tutor-reminder" target="_blank" class="btn btn-accent w-100">
+                <a href="https://harryleung522.github.io/pi-tutor-reminder/" target="_blank" class="btn btn-accent w-100">
                     <i class="bi bi-box-arrow-up-right"></i> 前往導師提示器網站
                 </a>
             </div>
@@ -133,13 +132,15 @@
         let allEvents = [];
         let calendar;
 
-        // 導師顏色配置
         const TUTOR_COLORS = {
             'Harry': 'tutor-border-harry',
             'Zoe': 'tutor-border-zoe',
             'Ian': 'tutor-border-ian',
             'Chris': 'tutor-border-chris'
         };
+
+        // 定義優先排序清單
+        const PRIORITY_TUTORS = ['Harry', 'Zoe', 'Chris', 'Ian'];
 
         document.addEventListener('DOMContentLoaded', function() {
             initCalendar();
@@ -157,9 +158,7 @@
                 headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
                 eventContent: function(arg) {
                     let p = arg.event.extendedProps;
-                    // 根據導師獲取 CSS Class
                     let colorClass = TUTOR_COLORS[p.tutor] || 'tutor-border-default';
-                    
                     return {
                         html: `<div class="${colorClass}" style="padding-left: 5px;">
                                 <div class="event-time">${p.timeStr} <span class="event-tutor">| ${p.tutor}</span></div>
@@ -182,30 +181,25 @@
                     for (let i = 1; i < rows.length; i++) {
                         let col = rows[i];
                         if (!col[0] || !col[3]) continue;
-
                         let date = parseDate(col[3]);
                         if (date) {
-                            // 處理「多人合教」情況：按斜線 / 分割導師名字
                             let tutorsInRow = col[6] ? col[6].split('/') : ['未指定'];
-                            
                             tutorsInRow.forEach(tName => {
                                 let cleanName = tName.trim();
                                 if(cleanName === "") return;
-                                
                                 allEvents.push({
                                     start: date,
                                     school: col[0],
                                     course: col[1],
                                     timeStr: col[5],
-                                    tutor: cleanName // 每一個分開的導師都是獨立的事件
+                                    tutor: cleanName
                                 });
                                 tutorSet.add(cleanName);
                             });
-
                             if(col[1]) courseSet.add(col[1].trim());
                         }
                     }
-                    populateSelect('filterTutor', tutorSet);
+                    populateTutorSelect(tutorSet);
                     populateSelect('filterCourse', courseSet);
                     refreshCalendar();
                     document.getElementById('loading').style.display = 'none';
@@ -216,6 +210,29 @@
         function parseDate(s) {
             const m = s.match(/(\d+)年(\d+)月(\d+)日/);
             return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null;
+        }
+
+        // 導師專用的排序填充函式
+        function populateTutorSelect(tutorSet) {
+            const s = document.getElementById('filterTutor');
+            const tutors = Array.from(tutorSet);
+            
+            // 排序邏輯：優先清單內的排前面，其餘按字元排序
+            tutors.sort((a, b) => {
+                let indexA = PRIORITY_TUTORS.indexOf(a);
+                let indexB = PRIORITY_TUTORS.indexOf(b);
+                
+                if (indexA !== -1 && indexB !== -1) return indexA - indexB; // 都在優先清單中，按清單順序
+                if (indexA !== -1) return -1; // A在清單中，B不在，A排前
+                if (indexB !== -1) return 1;  // B在清單中，A不在，B排前
+                return a.localeCompare(b);    // 都不在清單中，按字母/筆劃
+            });
+
+            tutors.forEach(t => {
+                let o = document.createElement('option');
+                o.value = o.text = t;
+                s.appendChild(o);
+            });
         }
 
         function populateSelect(id, data) {
@@ -231,12 +248,9 @@
             const t = document.getElementById('filterTutor').value;
             const c = document.getElementById('filterCourse').value;
             calendar.removeAllEvents();
-            
-            // 過濾邏輯
             let filtered = allEvents.filter(e => 
                 (t === 'all' || e.tutor === t) && (c === 'all' || e.course === c)
             );
-            
             calendar.addEventSource(filtered);
         }
     </script>
