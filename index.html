@@ -54,6 +54,13 @@
         }
         .btn-accent:hover { opacity: 0.8; color: white; }
 
+        /* 移除所有連結底線 (包括日期、星期標題) */
+        a { text-decoration: none !important; }
+        .fc-col-header-cell-cushion, .fc-daygrid-day-number {
+            text-decoration: none !important;
+            color: var(--primary-color) !important;
+        }
+
         .fc .fc-button-primary {
             background-color: var(--primary-color);
             border-color: var(--primary-color);
@@ -116,9 +123,8 @@
                 <div class="col-md-4">
                     <label class="form-label fw-bold">顯示模式</label>
                     <select id="viewSelect" class="form-select">
-                        <option value="dayGridMonth">月曆視圖</option>
-                        <option value="listWeek">週列表</option>
-                        <option value="timeGridWeek">週時間表</option>
+                        <option value="dayGridMonth">月曆視圖 (Month)</option>
+                        <option value="dayGridWeek">一週日曆 (Week)</option>
                     </select>
                 </div>
             </div>
@@ -155,8 +161,8 @@
                 initialView: 'dayGridMonth',
                 locale: 'zh-tw',
                 headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
-                // 讓日曆根據我們自定義的順序排放事件
                 eventOrder: "sortOrder,start",
+                dayMaxEvents: true, // 當事件過多時顯示 "more"
                 eventContent: function(arg) {
                     let p = arg.event.extendedProps;
                     let colorClass = TUTOR_COLORS[p.tutor] || 'tutor-border-default';
@@ -189,7 +195,6 @@
                                 let cleanName = tName.trim();
                                 if(cleanName === "") return;
                                 
-                                // 計算排序值：在優先清單中的給予 0-3，其餘給予 99
                                 let sOrder = PRIORITY_TUTORS.indexOf(cleanName);
                                 if(sOrder === -1) sOrder = 99;
 
@@ -199,7 +204,7 @@
                                     course: col[1],
                                     timeStr: col[5],
                                     tutor: cleanName,
-                                    sortOrder: sOrder // 新增排序屬性
+                                    sortOrder: sOrder
                                 });
                                 tutorSet.add(cleanName);
                             });
