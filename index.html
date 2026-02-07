@@ -70,12 +70,12 @@
             border-radius: 4px;
         }
 
-        /* 導師顏色邊框定義 */
-        .tutor-border-default { border-left: 5px solid #3498db !important; } /* 天藍 */
-        .tutor-border-harry { border-left: 5px solid #f39c12 !important; }   /* 橙 */
-        .tutor-border-zoe { border-left: 5px solid #27ae60 !important; }     /* 綠 */
-        .tutor-border-ian { border-left: 5px solid #e74c3c !important; }     /* 紅 (已改為紅色) */
-        .tutor-border-chris { border-left: 5px solid #8e44ad !important; }   /* 紫 */
+        /* 導師顏色邊框 */
+        .tutor-border-default { border-left: 5px solid #3498db !important; } 
+        .tutor-border-harry { border-left: 5px solid #f39c12 !important; }   
+        .tutor-border-zoe { border-left: 5px solid #27ae60 !important; }     
+        .tutor-border-ian { border-left: 5px solid #e74c3c !important; }     
+        .tutor-border-chris { border-left: 5px solid #8e44ad !important; }   
 
         .event-time { font-weight: 700; color: #444; }
         .event-tutor { font-size: 0.85em; color: #666; font-style: italic; }
@@ -139,7 +139,6 @@
             'Chris': 'tutor-border-chris'
         };
 
-        // 定義優先排序清單
         const PRIORITY_TUTORS = ['Harry', 'Zoe', 'Chris', 'Ian'];
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -156,6 +155,8 @@
                 initialView: 'dayGridMonth',
                 locale: 'zh-tw',
                 headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
+                // 讓日曆根據我們自定義的順序排放事件
+                eventOrder: "sortOrder,start",
                 eventContent: function(arg) {
                     let p = arg.event.extendedProps;
                     let colorClass = TUTOR_COLORS[p.tutor] || 'tutor-border-default';
@@ -187,12 +188,18 @@
                             tutorsInRow.forEach(tName => {
                                 let cleanName = tName.trim();
                                 if(cleanName === "") return;
+                                
+                                // 計算排序值：在優先清單中的給予 0-3，其餘給予 99
+                                let sOrder = PRIORITY_TUTORS.indexOf(cleanName);
+                                if(sOrder === -1) sOrder = 99;
+
                                 allEvents.push({
                                     start: date,
                                     school: col[0],
                                     course: col[1],
                                     timeStr: col[5],
-                                    tutor: cleanName
+                                    tutor: cleanName,
+                                    sortOrder: sOrder // 新增排序屬性
                                 });
                                 tutorSet.add(cleanName);
                             });
@@ -212,22 +219,17 @@
             return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null;
         }
 
-        // 導師專用的排序填充函式
         function populateTutorSelect(tutorSet) {
             const s = document.getElementById('filterTutor');
             const tutors = Array.from(tutorSet);
-            
-            // 排序邏輯：優先清單內的排前面，其餘按字元排序
             tutors.sort((a, b) => {
                 let indexA = PRIORITY_TUTORS.indexOf(a);
                 let indexB = PRIORITY_TUTORS.indexOf(b);
-                
-                if (indexA !== -1 && indexB !== -1) return indexA - indexB; // 都在優先清單中，按清單順序
-                if (indexA !== -1) return -1; // A在清單中，B不在，A排前
-                if (indexB !== -1) return 1;  // B在清單中，A不在，B排前
-                return a.localeCompare(b);    // 都不在清單中，按字母/筆劃
+                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                if (indexA !== -1) return -1;
+                if (indexB !== -1) return 1;
+                return a.localeCompare(b);
             });
-
             tutors.forEach(t => {
                 let o = document.createElement('option');
                 o.value = o.text = t;
