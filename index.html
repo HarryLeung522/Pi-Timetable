@@ -93,6 +93,11 @@
         }
 
         #loading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        
+        .detail-item {
+            font-size: 0.95rem;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -106,16 +111,10 @@
         <h2 class="text-center mb-4 fw-bold"><i class="bi bi-calendar3"></i> 派克教班日期</h2>
         
         <div class="controls-box text-center">
-            <div class="mb-4 border-bottom pb-4">
-                <a href="https://harryleung522.github.io/pi-tutor-reminder/" target="_blank" class="btn btn-accent w-100">
-                    <i class="bi bi-box-arrow-up-right"></i> 前往導師提示器網站
-                </a>
-            </div>
-
-            <div class="row g-3 text-start">
+            <div class="row g-3 text-start mb-3">
                 <div class="col-md-4">
-                    <label class="form-label fw-bold">選取導師</label>
-                    <select id="filterTutor" class="form-select">
+                    <label class="form-label fw-bold">選取導師1</label>
+                    <select id="filterTutor1" class="form-select">
                         <option value="all">顯示所有導師</option>
                     </select>
                 </div>
@@ -134,14 +133,55 @@
                     </select>
                 </div>
             </div>
+            
+            <div class="row g-3 text-start">
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">選取導師2</label>
+                    <select id="filterTutor2" class="form-select">
+                        <option value="none">無</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">選取導師3</label>
+                    <select id="filterTutor3" class="form-select">
+                        <option value="none">無</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">選取導師4</label>
+                    <select id="filterTutor4" class="form-select">
+                        <option value="none">無</option>
+                    </select>
+                </div>
+            </div>
         </div>
 
         <div id="calendar"></div>
+
+        <div class="controls-box mt-5">
+            <h3 class="text-center mb-4 fw-bold"><i class="bi bi-search"></i> 按學校/課程顯示</h3>
+            <div class="row g-3 text-start">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">學校名稱 (A行)</label>
+                    <select id="schoolSelect" class="form-select">
+                        <option value="">請先選擇學校...</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">課程名稱 (I行)</label>
+                    <select id="schoolCourseSelect" class="form-select" disabled>
+                        <option value="">請選擇課程...</option>
+                    </select>
+                </div>
+            </div>
+            <div id="courseDetailsList" class="mt-4 list-group"></div>
+        </div>
     </div>
 
     <script>
         const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQFFF43IJhu4qgR8KiR_Oo9lwv7LkuTcjHzebpTvUd-SnnivG_5GwDT3-JzEncLTxKXbZuQ8LnU90n3/pub?output=csv';
         let allEvents = [];
+        let rawSheetData = []; // 用於存放完整的原始資料，供下方搜尋區塊使用
         let calendar;
 
         const TUTOR_COLORS = {
@@ -157,9 +197,15 @@
             initCalendar();
             fetchData();
             
-            document.getElementById('filterTutor').addEventListener('change', refreshCalendar);
+            // 綁定 4 個導師選單的事件
+            ['filterTutor1', 'filterTutor2', 'filterTutor3', 'filterTutor4'].forEach(id => {
+                document.getElementById(id).addEventListener('change', refreshCalendar);
+            });
             document.getElementById('filterCourse').addEventListener('change', refreshCalendar);
             document.getElementById('viewSelect').addEventListener('change', (e) => calendar.changeView(e.target.value));
+            
+            // 綁定新的選單事件
+            setupSchoolCourseListeners();
         });
 
         function initCalendar() {
@@ -194,10 +240,28 @@
                     const rows = results.data;
                     let tutorSet = new Set();
                     let courseSet = new Set();
+                    let schoolSetForDisplay = new Set(); // 給下方查詢區塊用的學校清單
+                    
+                    rawSheetData = []; // 初始化
 
                     for (let i = 1; i < rows.length; i++) {
                         let col = rows[i];
                         if (!col[0] || !col[3]) continue;
+                        
+                        // 儲存完整資料給下方「按學校/課程顯示」使用
+                        // A=0, C=2, D=3, E=4, F=5, G=6, I=8
+                        rawSheetData.push({
+                            A: (col[0] || '').trim(),
+                            C: (col[2] || '').trim(),
+                            D: (col[3] || '').trim(),
+                            E: (col[4] || '').trim(),
+                            F: (col[5] || '').trim(),
+                            G: (col[6] || '').trim(),
+                            I: (col[8] || '').trim()
+                        });
+                        
+                        schoolSetForDisplay.add((col[0] || '').trim());
+
                         let date = parseDate(col[3]);
                         if (date) {
                             let tutorsInRow = col[6] ? col[6].split('/') : ['未指定'];
@@ -209,7 +273,7 @@
                                 if(sOrder === -1) sOrder = 99;
 
                                 allEvents.push({
-                                    title: cleanName + " | " + col[0], // 列表視圖會用到 title
+                                    title: cleanName + " | " + col[0],
                                     start: date,
                                     school: col[0],
                                     course: col[1],
@@ -224,6 +288,8 @@
                     }
                     populateTutorSelect(tutorSet);
                     populateSelect('filterCourse', courseSet);
+                    populateSchoolSelect(schoolSetForDisplay);
+                    
                     refreshCalendar();
                     document.getElementById('loading').style.display = 'none';
                 }
@@ -236,7 +302,13 @@
         }
 
         function populateTutorSelect(tutorSet) {
-            const s = document.getElementById('filterTutor');
+            const selects = [
+                document.getElementById('filterTutor1'),
+                document.getElementById('filterTutor2'),
+                document.getElementById('filterTutor3'),
+                document.getElementById('filterTutor4')
+            ];
+
             const tutors = Array.from(tutorSet);
             tutors.sort((a, b) => {
                 let indexA = PRIORITY_TUTORS.indexOf(a);
@@ -246,10 +318,15 @@
                 if (indexB !== -1) return 1;
                 return a.localeCompare(b);
             });
+
+            // 把導師資料放入4個選單中
             tutors.forEach(t => {
-                let o = document.createElement('option');
-                o.value = o.text = t;
-                s.appendChild(o);
+                selects.forEach(s => {
+                    let o = document.createElement('option');
+                    o.value = t;
+                    o.text = t;
+                    s.appendChild(o);
+                });
             });
         }
 
@@ -263,13 +340,101 @@
         }
 
         function refreshCalendar() {
-            const t = document.getElementById('filterTutor').value;
+            // 取得 4 個導師選單的值
+            const t1 = document.getElementById('filterTutor1').value;
+            const t2 = document.getElementById('filterTutor2').value;
+            const t3 = document.getElementById('filterTutor3').value;
+            const t4 = document.getElementById('filterTutor4').value;
             const c = document.getElementById('filterCourse').value;
+
+            // 整理已選擇的導師（排除 "none"）
+            const selectedTutors = [t1, t2, t3, t4].filter(val => val !== 'none');
+            // 如果其中有 "all"，則代表顯示全部
+            const showAllTutors = selectedTutors.includes('all');
+
             calendar.removeAllEvents();
-            let filtered = allEvents.filter(e => 
-                (t === 'all' || e.tutor === t) && (c === 'all' || e.course === c)
-            );
+            
+            let filtered = allEvents.filter(e => {
+                const matchTutor = showAllTutors || selectedTutors.includes(e.tutor);
+                const matchCourse = (c === 'all' || e.course === c);
+                return matchTutor && matchCourse;
+            });
+            
             calendar.addEventSource(filtered);
+        }
+
+        // ================= 學校/課程連動查詢邏輯 =================
+
+        function populateSchoolSelect(schoolSet) {
+            const schoolSelect = document.getElementById('schoolSelect');
+            Array.from(schoolSet).sort().forEach(school => {
+                if(school) {
+                    let opt = document.createElement('option');
+                    opt.value = opt.text = school;
+                    schoolSelect.appendChild(opt);
+                }
+            });
+        }
+
+        function setupSchoolCourseListeners() {
+            const schoolSelect = document.getElementById('schoolSelect');
+            const courseSelect = document.getElementById('schoolCourseSelect');
+            const detailList = document.getElementById('courseDetailsList');
+
+            // 選擇學校後，更新課程選單
+            schoolSelect.addEventListener('change', function() {
+                const selectedSchool = this.value;
+                
+                // 重置課程與結果列表
+                courseSelect.innerHTML = '<option value="">請選擇課程...</option>';
+                detailList.innerHTML = '';
+                
+                if (!selectedSchool) {
+                    courseSelect.disabled = true;
+                    return;
+                }
+                
+                courseSelect.disabled = false;
+                let courseSetForSchool = new Set();
+                
+                // 篩選出該學校的所有課程 (I行)
+                rawSheetData.filter(r => r.A === selectedSchool).forEach(r => {
+                    if (r.I) courseSetForSchool.add(r.I);
+                });
+                
+                Array.from(courseSetForSchool).sort().forEach(c => {
+                    let opt = document.createElement('option');
+                    opt.value = opt.text = c;
+                    courseSelect.appendChild(opt);
+                });
+            });
+
+            // 選擇課程後，顯示格式化資料
+            courseSelect.addEventListener('change', function() {
+                const selectedSchool = schoolSelect.value;
+                const selectedCourse = this.value;
+                
+                detailList.innerHTML = ''; // 清空列表
+                
+                if (!selectedCourse) return;
+                
+                // 篩選符合學校與課程的資料列
+                const filteredData = rawSheetData.filter(r => r.A === selectedSchool && r.I === selectedCourse);
+                
+                if(filteredData.length === 0) {
+                    detailList.innerHTML = '<div class="list-group-item text-muted">無相關資料</div>';
+                    return;
+                }
+
+                filteredData.forEach(r => {
+                    let item = document.createElement('div');
+                    item.className = 'list-group-item detail-item';
+                    
+                    // 要求的格式：A行-I行-C行-G行- D行-E行-F行
+                    item.innerHTML = `<strong>${r.A}</strong> - ${r.I} - ${r.C} - ${r.G} - ${r.D} - ${r.E} - ${r.F}`;
+                    detailList.appendChild(item);
+                });
+            });
         }
     </script>
 </body>
