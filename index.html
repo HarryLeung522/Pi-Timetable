@@ -41,19 +41,6 @@
             margin-bottom: 25px;
         }
 
-        .btn-accent {
-            background-color: #27ae60;
-            border: none;
-            color: white;
-            font-weight: 600;
-            padding: 10px 20px;
-            text-decoration: none;
-            display: inline-block;
-            border-radius: 6px;
-            transition: opacity 0.2s;
-        }
-        .btn-accent:hover { opacity: 0.8; color: white; }
-
         /* 移除所有連結底線 */
         a { text-decoration: none !important; }
         .fc-col-header-cell-cushion, .fc-daygrid-day-number, .fc-list-day-text, .fc-list-day-side-text {
@@ -97,6 +84,34 @@
         .detail-item {
             font-size: 0.95rem;
             color: #333;
+        }
+
+        /* ======== 手機響應式優化 ======== */
+        @media (max-width: 768px) {
+            .main-container {
+                margin: 10px;
+                padding: 15px;
+            }
+            .controls-box {
+                padding: 15px;
+            }
+            /* 讓 FullCalendar 上方的按鈕群組在手機上自動換行且置中 */
+            .fc-header-toolbar {
+                flex-wrap: wrap;
+                gap: 10px;
+                justify-content: center !important;
+            }
+            .fc-toolbar-chunk {
+                text-align: center;
+            }
+            /* 縮小日曆標題 */
+            .fc .fc-toolbar-title {
+                font-size: 1.25rem !important;
+            }
+            /* 縮小月曆格子內的字體，避免擠壓破版 */
+            .event-time { font-size: 0.8em; }
+            .event-tutor { font-size: 0.75em; }
+            .fc-event .small { font-size: 0.75em; }
         }
     </style>
 </head>
@@ -181,7 +196,7 @@
     <script>
         const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQFFF43IJhu4qgR8KiR_Oo9lwv7LkuTcjHzebpTvUd-SnnivG_5GwDT3-JzEncLTxKXbZuQ8LnU90n3/pub?output=csv';
         let allEvents = [];
-        let rawSheetData = []; // 用於存放完整的原始資料，供下方搜尋區塊使用
+        let rawSheetData = []; 
         let calendar;
 
         const TUTOR_COLORS = {
@@ -209,19 +224,24 @@
         });
 
         function initCalendar() {
+            // 偵測螢幕寬度，如果是手機尺寸 (<768px)，預設改為顯示「週列表」
+            const isMobile = window.innerWidth < 768;
+            const defaultView = isMobile ? 'listWeek' : 'dayGridMonth';
+            
+            // 同步更新「顯示模式」下拉選單的值
+            document.getElementById('viewSelect').value = defaultView;
+
             calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
-                initialView: 'dayGridMonth',
+                initialView: defaultView,
                 locale: 'zh-tw',
                 headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
                 eventOrder: "sortOrder,start",
-                // 關鍵設定：強制顯示所有事件，不收縮成 +more
                 dayMaxEvents: false,
                 dayMaxEventRows: false,
                 eventContent: function(arg) {
                     let p = arg.event.extendedProps;
                     let colorClass = TUTOR_COLORS[p.tutor] || 'tutor-border-default';
                     
-                    // 列表模式下的顯示略有不同，但這裡統一使用 HTML 結構
                     return {
                         html: `<div class="${colorClass}" style="padding-left: 5px;">
                                 <div class="event-time">${p.timeStr} <span class="event-tutor">| ${p.tutor}</span></div>
@@ -240,16 +260,14 @@
                     const rows = results.data;
                     let tutorSet = new Set();
                     let courseSet = new Set();
-                    let schoolSetForDisplay = new Set(); // 給下方查詢區塊用的學校清單
+                    let schoolSetForDisplay = new Set(); 
                     
-                    rawSheetData = []; // 初始化
+                    rawSheetData = []; 
 
                     for (let i = 1; i < rows.length; i++) {
                         let col = rows[i];
                         if (!col[0] || !col[3]) continue;
                         
-                        // 儲存完整資料給下方「按學校/課程顯示」使用
-                        // A=0, C=2, D=3, E=4, F=5, G=6, I=8
                         rawSheetData.push({
                             A: (col[0] || '').trim(),
                             C: (col[2] || '').trim(),
@@ -319,7 +337,6 @@
                 return a.localeCompare(b);
             });
 
-            // 把導師資料放入4個選單中
             tutors.forEach(t => {
                 selects.forEach(s => {
                     let o = document.createElement('option');
@@ -340,16 +357,13 @@
         }
 
         function refreshCalendar() {
-            // 取得 4 個導師選單的值
             const t1 = document.getElementById('filterTutor1').value;
             const t2 = document.getElementById('filterTutor2').value;
             const t3 = document.getElementById('filterTutor3').value;
             const t4 = document.getElementById('filterTutor4').value;
             const c = document.getElementById('filterCourse').value;
 
-            // 整理已選擇的導師（排除 "none"）
             const selectedTutors = [t1, t2, t3, t4].filter(val => val !== 'none');
-            // 如果其中有 "all"，則代表顯示全部
             const showAllTutors = selectedTutors.includes('all');
 
             calendar.removeAllEvents();
@@ -362,8 +376,6 @@
             
             calendar.addEventSource(filtered);
         }
-
-        // ================= 學校/課程連動查詢邏輯 =================
 
         function populateSchoolSelect(schoolSet) {
             const schoolSelect = document.getElementById('schoolSelect');
@@ -381,11 +393,9 @@
             const courseSelect = document.getElementById('schoolCourseSelect');
             const detailList = document.getElementById('courseDetailsList');
 
-            // 選擇學校後，更新課程選單
             schoolSelect.addEventListener('change', function() {
                 const selectedSchool = this.value;
                 
-                // 重置課程與結果列表
                 courseSelect.innerHTML = '<option value="">請選擇課程...</option>';
                 detailList.innerHTML = '';
                 
@@ -397,7 +407,6 @@
                 courseSelect.disabled = false;
                 let courseSetForSchool = new Set();
                 
-                // 篩選出該學校的所有課程 (I行)
                 rawSheetData.filter(r => r.A === selectedSchool).forEach(r => {
                     if (r.I) courseSetForSchool.add(r.I);
                 });
@@ -409,16 +418,14 @@
                 });
             });
 
-            // 選擇課程後，顯示格式化資料
             courseSelect.addEventListener('change', function() {
                 const selectedSchool = schoolSelect.value;
                 const selectedCourse = this.value;
                 
-                detailList.innerHTML = ''; // 清空列表
+                detailList.innerHTML = ''; 
                 
                 if (!selectedCourse) return;
                 
-                // 篩選符合學校與課程的資料列
                 const filteredData = rawSheetData.filter(r => r.A === selectedSchool && r.I === selectedCourse);
                 
                 if(filteredData.length === 0) {
@@ -430,7 +437,6 @@
                     let item = document.createElement('div');
                     item.className = 'list-group-item detail-item';
                     
-                    // 要求的格式：A行-I行-C行-G行- D行-E行-F行
                     item.innerHTML = `<strong>${r.A}</strong> - ${r.I} - ${r.C} - ${r.G} - ${r.D} - ${r.E} - ${r.F}`;
                     detailList.appendChild(item);
                 });
